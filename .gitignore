@@ -1,0 +1,56 @@
+# ============================================================
+# .gitignore — TF Databricks Retail
+# ============================================================
+
+# Datasets (descargar desde Kaggle, ver datasets/README.md)
+datasets/*.csv
+datasets/*.zip
+datasets/*.xlsx
+datasets/*/*.csv
+
+# Databricks Asset Bundle outputs
+.databricks/
+*.databricks-bundle-state*
+.bundle_lock
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# Jupyter
+*.ipynb_checkpoints
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets (¡nunca commitear tokens ni credenciales!)
+.env
+.env.local
+*.pem
+*.key
+secrets.yml
+config.local.yml
+
+# Logs
+*.log
+logs/
+
+# Spark / temporal
+spark-warehouse/
+metastore_db/
+derby.log
