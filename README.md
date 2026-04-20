@@ -20,32 +20,8 @@ Pipeline ETL end-to-end con arquitectura medallion (Bronze → Silver → Gold) 
 ---
 
 ## Arquitectura
+![Arquitectura del proyecto](./arquitectura.png)
 
-```
-┌──────────────────┐                              ┌─────────────────────┐
-│  ADLS Gen2       │                              │  Azure Databricks   │
-│  Storage Account │  ── Managed Identity ───▶   │  Premium Workspace  │
-│  (4 containers)  │     (Access Connector)       │  Unity Catalog ON   │
-└──────────────────┘                              └─────────┬───────────┘
-                                                            │
-            ┌───────────────────────────────────────────────┼───────────────────────────────┐
-            ▼                                               ▼                               ▼
-   ┌─────────────────┐                            ┌─────────────────┐             ┌─────────────────┐
-   │  bronze/        │   PySpark + Delta          │  silver/        │             │  gold/          │
-   │  (raw → Delta)  │   ──── transform ──▶       │  (limpia +      │ ── agg ──▶  │  (analytics-    │
-   │  7 tablas       │                            │   joins)        │             │   ready)        │
-   │                 │                            │  2 tablas       │             │  4 tablas       │
-   └─────────────────┘                            └─────────────────┘             └────────┬────────┘
-                                                                                           │
-                                                                                           ▼
-                                                                                ┌──────────────────┐
-                                                                                │ Lakeview         │
-                                                                                │ Dashboard        │
-                                                                                └──────────────────┘
-
-Orquestación: Databricks Asset Bundles (databricks.yml)
-CI/CD:        GitHub Actions (.github/workflows/deploy.yml)
-```
 
 ### Principios de diseño
 - **Sin secretos en código:** la conexión a ADLS es 100% via Managed Identity (no SAS, no account keys, no service principals con secret).
