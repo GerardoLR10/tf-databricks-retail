@@ -1,0 +1,114 @@
+# ============================================================
+# Databricks Asset Bundle
+# Define un job que orquesta el ETL completo: PrepAmb → Bronze → Silver → Gold
+#
+# Comandos clave:
+#   databricks bundle validate              # valida syntaxis
+#   databricks bundle deploy --target dev   # despliega a dev
+#   databricks bundle deploy --target prod  # despliega a prod
+#   databricks bundle run tf_retail_etl --target dev
+# ============================================================
+
+bundle:
+  name: tf-databricks-retail
+
+# ------------------------------------------------------------
+# Variables del bundle (se pueden sobreescribir por target)
+# ------------------------------------------------------------
+variables:
+  catalog_name:
+    description: "Catalog de Unity Catalog donde corre el ETL"
+    default: "tf_retail"
+
+  cluster_node_type:
+    description: "Tipo de nodo del job cluster"
+    default: "Standard_D4pds_v6"
+
+  cluster_runtime:
+    description: "Versión del Databricks runtime"
+    default: "17.3.x-scala2.13"
+
+# ------------------------------------------------------------
+# Recursos del bundle (jobs, pipelines, etc)
+# ------------------------------------------------------------
+resources:
+  jobs:
+    tf_retail_etl:
+      name: "TF Retail - ETL Medallion Pipeline"
+      description: "Pipeline ETL bronze → silver → gold para datasets retail (E-commerce + Instacart)"
+
+      # Cluster compartido por las tareas (más barato que crear uno por tarea)
+      job_clusters:
+        - job_cluster_key: etl_cluster
+          new_cluster:
+            spark_version: ${var.cluster_runtime}
+            node_type_id: ${var.cluster_node_type}
+            num_workers: 0
+            data_security_mode: SINGLE_USER
+            spark_conf:
+              "spark.master": "local[*, 4]"
+              "spark.databricks.cluster.profile": "singleNode"
+            custom_tags:
+              ResourceClass: "SingleNode"
+              Project: "tf-databricks-retail"
+
+      # Tareas en orden con dependencias
+      tasks:
+        - task_key: prep_ambiente
+          description: "Crea catalog y schemas si no existen"
+          job_cluster_key: etl_cluster
+          notebook_task:
+            notebook_path: ../PrepAmb/01_prep_ambiente.py
+
+        - task_key: bronze
+          description: "Ingesta CSV crudos desde raw/ a tablas Delta en bronze"
+          job_cluster_key: etl_cluster
+          depends_on:
+            - task_key: prep_ambiente
+          notebook_task:
+            notebook_path: ../proceso/02_bronze.py
+
+        - task_key: silver
+          description: "Limpieza, normalización y joins → silver"
+          job_cluster_key: etl_cluster
+          depends_on:
+            - task_key: bronze
+          notebook_task:
+            notebook_path: ../proceso/03_silver.py
+
+        - task_key: gold
+          description: "Agregaciones de negocio para analytics → gold"
+          job_cluster_key: etl_cluster
+          depends_on:
+            - task_key: silver
+          notebook_task:
+            notebook_path: ../proceso/04_gold.py
+
+      # Reintentos automáticos en fallos transitorios
+      max_concurrent_runs: 1
+      timeout_seconds: 3600
+
+      # Notificaciones (opcional, requiere email configurado)
+      # email_notifications:
+      #   on_failure:
+      #     - tu_email@ejemplo.com
+
+# ------------------------------------------------------------
+# Targets (entornos)
+# ------------------------------------------------------------
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: ${DATABRICKS_HOST}
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+
+  prod:
+    mode: production
+    workspace:
+      host: ${DATABRICKS_HOST}
+      root_path: /Workspace/tf-databricks-retail-prod
+    # En producción, todos los recursos se prefijan con [prod] para distinguirlos
+    presets:
+      name_prefix: "[prod] "
